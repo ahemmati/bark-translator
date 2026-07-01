@@ -5,6 +5,7 @@ import { HistoryScreen } from "./screens/History/HistoryScreen";
 import { ModelStatsScreen } from "./screens/ModelStats/ModelStatsScreen";
 import { SettingsScreen } from "./screens/Settings/SettingsScreen";
 import { LibraryScreen } from "./screens/Library/LibraryScreen";
+import { TalkToDogScreen } from "./screens/TalkToDog/TalkToDogScreen";
 
 // These two screens pull in TensorFlow.js (~700kB+); lazy-load so the rest of
 // the app shell (profiles, history, settings) is usable before that downloads.
@@ -15,10 +16,11 @@ const TranslateModeScreen = lazy(() =>
   import("./screens/TranslateMode/TranslateModeScreen").then((m) => ({ default: m.TranslateModeScreen })),
 );
 
-type Tab = "translate" | "train" | "dogs" | "library" | "history" | "stats" | "settings";
+type Tab = "translate" | "talk" | "train" | "dogs" | "library" | "history" | "stats" | "settings";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "translate", label: "Translate", icon: "🗣️" },
+  { id: "talk", label: "Talk", icon: "💬" },
   { id: "train", label: "Train", icon: "🎓" },
   { id: "dogs", label: "Dogs", icon: "🐕" },
   { id: "library", label: "Library", icon: "📖" },
@@ -53,6 +55,7 @@ function Shell() {
         <Suspense fallback={<p className="hint">Loading…</p>}>
           <div key={tab} className="screen-transition">
             {tab === "translate" && <TranslateModeScreen />}
+            {tab === "talk" && <TalkToDogScreen />}
             {tab === "train" && <TrainingModeScreen />}
             {tab === "dogs" && <DogProfilesScreen />}
             {tab === "library" && <LibraryScreen />}
