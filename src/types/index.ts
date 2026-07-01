@@ -325,12 +325,18 @@ export interface Dog {
 
 export type SampleSource = "training" | "correction";
 
-export interface Sample {
+export interface AudioPayload {
+  audioBlob: Blob;
+  features: AudioFeatures;
+}
+
+export interface ImagePayload {
+  imageBlob: Blob;
+}
+
+interface SampleBase {
   id: string;
   dogId: string;
-  audioBlob: Blob;
-  imageBlob?: Blob;
-  features: AudioFeatures;
   postureTags: PostureTag[];
   category: MoodCategory;
   sentence?: string;
@@ -338,7 +344,36 @@ export interface Sample {
   createdAt: number;
 }
 
+// A sample must carry at least one modality. Modeled as a discriminated
+// union (rather than two independently-optional fields) so "has audio" /
+// "has image" is a compiler-checked narrowing everywhere a Sample is read,
+// not a convention every call site has to re-derive.
+export type Sample = SampleBase &
+  (
+    | { modality: "audio"; audio: AudioPayload; image?: undefined }
+    | { modality: "image"; image: ImagePayload; audio?: undefined }
+    | { modality: "both"; audio: AudioPayload; image: ImagePayload }
+  );
+
+export function hasAudio(sample: Sample): sample is Sample & { audio: AudioPayload } {
+  return sample.modality === "audio" || sample.modality === "both";
+}
+
+export function hasImage(sample: Sample): sample is Sample & { image: ImagePayload } {
+  return sample.modality === "image" || sample.modality === "both";
+}
+
 export interface StoredModel {
+  dogId: string;
+  topology: unknown;
+  weightSpecs: unknown;
+  weightDataBase64: string;
+  trainedAt: number;
+  sampleCountAtTrain: number;
+  categories: MoodCategory[];
+}
+
+export interface StoredImageModel {
   dogId: string;
   topology: unknown;
   weightSpecs: unknown;
@@ -363,12 +398,15 @@ export interface PhrasePool {
 
 export type ConfidenceBucket = "notSure" | "fairlyConfident" | "veryConfident";
 
+export type ModalityUsed = "audio" | "image" | "both";
+
 export interface TranslationRecord {
   id: string;
   dogId: string;
   sampleId: string;
   predictedCategory: MoodCategory | null;
   confidence: ConfidenceBucket | "insufficientData";
+  modalityUsed: ModalityUsed;
   sentence: string;
   correctedCategory?: MoodCategory;
   correctedSentence?: string;

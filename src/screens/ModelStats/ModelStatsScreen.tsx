@@ -1,19 +1,29 @@
 import { useEffect, useState } from "react";
 import { useDogs } from "../../app/DogContext";
-import { modelsStore, samplesStore } from "../../modules/storage/db";
+import { modelsStore, imageModelsStore, samplesStore } from "../../modules/storage/db";
 import { estimateStorage, type StorageEstimate } from "../../modules/storage/blobStore";
-import { DEFAULT_CATEGORIES, type MoodCategory, type Sample, type StoredModel } from "../../types";
+import {
+  DEFAULT_CATEGORIES,
+  hasAudio,
+  hasImage,
+  type MoodCategory,
+  type Sample,
+  type StoredImageModel,
+  type StoredModel,
+} from "../../types";
 
 export function ModelStatsScreen() {
   const { activeDog } = useDogs();
   const [samples, setSamples] = useState<Sample[]>([]);
   const [model, setModel] = useState<StoredModel | null>(null);
+  const [imageModel, setImageModel] = useState<StoredImageModel | null>(null);
   const [storage, setStorage] = useState<StorageEstimate | null>(null);
 
   useEffect(() => {
     if (!activeDog) return;
     void samplesStore.byDog(activeDog.id).then(setSamples);
     void modelsStore.get(activeDog.id).then((m) => setModel(m ?? null));
+    void imageModelsStore.get(activeDog.id).then((m) => setImageModel(m ?? null));
     void estimateStorage().then(setStorage);
   }, [activeDog?.id]);
 
@@ -26,8 +36,12 @@ export function ModelStatsScreen() {
     );
   }
 
-  const counts = new Map<MoodCategory, number>();
-  for (const s of samples) counts.set(s.category, (counts.get(s.category) ?? 0) + 1);
+  const audioCounts = new Map<MoodCategory, number>();
+  const imageCounts = new Map<MoodCategory, number>();
+  for (const s of samples) {
+    if (hasAudio(s)) audioCounts.set(s.category, (audioCounts.get(s.category) ?? 0) + 1);
+    if (hasImage(s)) imageCounts.set(s.category, (imageCounts.get(s.category) ?? 0) + 1);
+  }
   const correctionCount = samples.filter((s) => s.source === "correction").length;
 
   return (
@@ -35,7 +49,7 @@ export function ModelStatsScreen() {
       <h2>Model Stats — {activeDog.name}</h2>
 
       <section className="card">
-        <h3>Model</h3>
+        <h3>🎤 Bark model</h3>
         {model ? (
           <ul>
             <li>Last trained: {new Date(model.trainedAt).toLocaleString()}</li>
@@ -43,7 +57,23 @@ export function ModelStatsScreen() {
             <li>Categories: {model.categories.length}</li>
           </ul>
         ) : (
-          <p className="hint">No model trained yet.</p>
+          <p className="hint">No bark model trained yet.</p>
+        )}
+      </section>
+
+      <section className="card">
+        <h3>📷 Photo model</h3>
+        {imageModel ? (
+          <ul>
+            <li>Last trained: {new Date(imageModel.trainedAt).toLocaleString()}</li>
+            <li>Samples at last training: {imageModel.sampleCountAtTrain}</li>
+            <li>Categories: {imageModel.categories.length}</li>
+          </ul>
+        ) : (
+          <p className="hint">
+            No photo model trained yet. Photo-based translation needs noticeably more labeled samples than bark
+            translation to be reliable.
+          </p>
         )}
       </section>
 
@@ -52,7 +82,7 @@ export function ModelStatsScreen() {
         <ul>
           {DEFAULT_CATEGORIES.map((c) => (
             <li key={c.id}>
-              {c.label}: {counts.get(c.id) ?? 0}
+              {c.emoji} {c.label}: 🎤{audioCounts.get(c.id) ?? 0} 📷{imageCounts.get(c.id) ?? 0}
             </li>
           ))}
         </ul>

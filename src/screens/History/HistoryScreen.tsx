@@ -9,6 +9,12 @@ function categoryLabel(id: string | null | undefined): string {
   return DEFAULT_CATEGORIES.find((c) => c.id === id)?.label ?? id;
 }
 
+function modalityIcon(modality: string | undefined): string {
+  if (modality === "image") return "📷";
+  if (modality === "both") return "🎤📷";
+  return "🎤";
+}
+
 export function HistoryScreen() {
   const { activeDog } = useDogs();
   const [records, setRecords] = useState<TranslationRecord[]>([]);
@@ -34,7 +40,9 @@ export function HistoryScreen() {
       <ul className="history-list">
         {records.map((r) => (
           <li key={r.id}>
-            <div className="history-time">{new Date(r.createdAt).toLocaleString()}</div>
+            <div className="history-time">
+              {modalityIcon(r.modalityUsed)} {new Date(r.createdAt).toLocaleString()}
+            </div>
             <div>
               <strong>
                 {categoryEmoji(r.predictedCategory)} {categoryLabel(r.predictedCategory)}

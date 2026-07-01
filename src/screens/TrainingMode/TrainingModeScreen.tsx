@@ -7,15 +7,24 @@ import { PhotoCapture } from "../../components/PhotoCapture";
 import { decodeAudioBlob } from "../../modules/audio/recorder";
 import { extractAudioFeatures } from "../../modules/audio/features";
 import { playBlob } from "../../modules/audio/playback";
-import { samplesStore, modelsStore } from "../../modules/storage/db";
+import { samplesStore, modelsStore, imageModelsStore } from "../../modules/storage/db";
 import { trainModelForDog, InsufficientDataError, MIN_SAMPLES_TO_TRAIN, MIN_CATEGORIES_TO_TRAIN } from "../../modules/ml/trainModel";
 import {
+  trainImageModelForDog,
+  DegenerateModelError,
+  MIN_IMAGE_SAMPLES_TO_TRAIN,
+  MIN_IMAGE_CATEGORIES_TO_TRAIN,
+} from "../../modules/ml/trainImageModel";
+import {
   DEFAULT_CATEGORIES,
+  hasAudio,
+  hasImage,
   suggestCategoryFromTags,
   type AudioFeatures,
   type MoodCategory,
   type PostureTag,
   type Sample,
+  type StoredImageModel,
   type StoredModel,
 } from "../../types";
 
@@ -23,6 +32,7 @@ export function TrainingModeScreen() {
   const { activeDog } = useDogs();
   const [samples, setSamples] = useState<Sample[]>([]);
   const [model, setModel] = useState<StoredModel | null>(null);
+  const [imageModel, setImageModel] = useState<StoredImageModel | null>(null);
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [features, setFeatures] = useState<AudioFeatures | null>(null);
@@ -32,6 +42,7 @@ export function TrainingModeScreen() {
   const [exampleSentence, setExampleSentence] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [trainStatus, setTrainStatus] = useState<string | null>(null);
+  const [imageTrainStatus, setImageTrainStatus] = useState<string | null>(null);
   const [training, setTraining] = useState(false);
 
   useEffect(() => {
@@ -43,6 +54,7 @@ export function TrainingModeScreen() {
     if (!activeDog) return;
     setSamples(await samplesStore.byDog(activeDog.id));
     setModel((await modelsStore.get(activeDog.id)) ?? null);
+    setImageModel((await imageModelsStore.get(activeDog.id)) ?? null);
   }
 
   async function handleRecorded(blob: Blob) {
@@ -67,19 +79,30 @@ export function TrainingModeScreen() {
   }
 
   async function saveSample() {
-    if (!activeDog || !audioBlob || !features || !category) return;
-    const sample: Sample = {
+    if (!activeDog || !category) return;
+    const hasAudioInput = audioBlob && features;
+    const hasImageInput = !!photo;
+    if (!hasAudioInput && !hasImageInput) return;
+
+    const base = {
       id: crypto.randomUUID(),
       dogId: activeDog.id,
-      audioBlob,
-      imageBlob: photo ?? undefined,
-      features,
       postureTags,
       category,
       sentence: exampleSentence.trim() || undefined,
-      source: "training",
+      source: "training" as const,
       createdAt: Date.now(),
     };
+
+    let sample: Sample;
+    if (hasAudioInput && hasImageInput) {
+      sample = { ...base, modality: "both", audio: { audioBlob: audioBlob!, features: features! }, image: { imageBlob: photo! } };
+    } else if (hasAudioInput) {
+      sample = { ...base, modality: "audio", audio: { audioBlob: audioBlob!, features: features! } };
+    } else {
+      sample = { ...base, modality: "image", image: { imageBlob: photo! } };
+    }
+
     await samplesStore.put(sample);
     resetForm();
     await refresh();
@@ -94,19 +117,35 @@ export function TrainingModeScreen() {
     if (!activeDog) return;
     setTraining(true);
     setTrainStatus(null);
+    setImageTrainStatus(null);
+
     try {
       const stored = await trainModelForDog(activeDog.id, (s) => setTrainStatus(s));
       setModel(stored);
-      setTrainStatus(`Trained on ${stored.sampleCountAtTrain} samples across ${stored.categories.length} categories.`);
+      setTrainStatus(`🎤 Trained on ${stored.sampleCountAtTrain} bark samples across ${stored.categories.length} categories.`);
     } catch (err) {
       if (err instanceof InsufficientDataError) {
-        setTrainStatus(err.message);
+        setTrainStatus(`🎤 ${err.message}`);
       } else {
-        setTrainStatus(`Training failed: ${err instanceof Error ? err.message : String(err)}`);
+        setTrainStatus(`🎤 Training failed: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } finally {
-      setTraining(false);
     }
+
+    try {
+      const storedImage = await trainImageModelForDog(activeDog.id, (s) => setImageTrainStatus(`📷 ${s}`));
+      setImageModel(storedImage);
+      setImageTrainStatus(
+        `📷 Trained on ${storedImage.sampleCountAtTrain} photos across ${storedImage.categories.length} categories.`,
+      );
+    } catch (err) {
+      if (err instanceof InsufficientDataError || err instanceof DegenerateModelError) {
+        setImageTrainStatus(`📷 ${err.message}`);
+      } else {
+        setImageTrainStatus(`📷 Training failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    setTraining(false);
   }
 
   if (!activeDog) {
@@ -118,15 +157,23 @@ export function TrainingModeScreen() {
     );
   }
 
-  const countsByCategory = new Map<MoodCategory, number>();
-  for (const s of samples) countsByCategory.set(s.category, (countsByCategory.get(s.category) ?? 0) + 1);
+  const audioCountsByCategory = new Map<MoodCategory, number>();
+  const imageCountsByCategory = new Map<MoodCategory, number>();
+  for (const s of samples) {
+    if (hasAudio(s)) audioCountsByCategory.set(s.category, (audioCountsByCategory.get(s.category) ?? 0) + 1);
+    if (hasImage(s)) imageCountsByCategory.set(s.category, (imageCountsByCategory.get(s.category) ?? 0) + 1);
+  }
+  const audioSampleCount = samples.filter(hasAudio).length;
+  const imageSampleCount = samples.filter(hasImage).length;
+  const canSave = !!category && ((audioBlob && features) || photo);
 
   return (
     <div className="screen">
       <h2>Training Mode — {activeDog.name}</h2>
 
       <section className="card">
-        <h3>1. Record a bark</h3>
+        <h3>1. Capture this moment</h3>
+        <p className="hint">Record a bark, take a photo, or both — either is enough to start labeling.</p>
         <RecordButton onRecorded={handleRecorded} />
         {status && <p className="hint">{status}</p>}
         {audioBlob && (
@@ -142,24 +189,23 @@ export function TrainingModeScreen() {
             )}
           </div>
         )}
+        <p className="hint">Photo</p>
+        <PhotoCapture onCapture={setPhoto} />
       </section>
 
-      {audioBlob && features && (
+      {((audioBlob && features) || photo) && (
         <section className="card">
           <h3>2. Label it</h3>
           <p className="hint">What's the dog's posture/context right now? (optional, but it sharpens the guess below)</p>
           <PostureTagPicker value={postureTags} onChange={setPostureTags} />
 
           <p className="hint">
-            What does this bark mean?
+            What does this mean?
             {suggestCategoryFromTags(postureTags) && (
               <> — body language suggests <strong>{DEFAULT_CATEGORIES.find((c) => c.id === suggestCategoryFromTags(postureTags))?.label}</strong> ✨, but you know your dog best</>
             )}
           </p>
           <CategoryPicker value={category} onChange={setCategory} suggested={suggestCategoryFromTags(postureTags)} />
-
-          <p className="hint">Optional photo</p>
-          <PhotoCapture onCapture={setPhoto} />
 
           <p className="hint">Optional: write what you think the dog is "saying" in this exact moment</p>
           <input
@@ -169,34 +215,45 @@ export function TrainingModeScreen() {
             onChange={(e) => setExampleSentence(e.target.value)}
           />
 
-          <button type="button" onClick={saveSample} disabled={!category}>
+          <button type="button" onClick={saveSample} disabled={!canSave}>
             Save Training Sample
           </button>
         </section>
       )}
 
       <section className="card">
-        <h3>3. Dataset ({samples.length} samples)</h3>
+        <h3>3. Dataset (🎤 {audioSampleCount} bark · 📷 {imageSampleCount} photo)</h3>
         <ul className="category-counts">
           {DEFAULT_CATEGORIES.map((c) => (
             <li key={c.id}>
-              {c.emoji} {c.label}: {countsByCategory.get(c.id) ?? 0}
+              {c.emoji} {c.label}: 🎤{audioCountsByCategory.get(c.id) ?? 0} 📷{imageCountsByCategory.get(c.id) ?? 0}
             </li>
           ))}
         </ul>
 
-        <button type="button" onClick={handleTrain} disabled={training || samples.length < MIN_SAMPLES_TO_TRAIN}>
+        <button
+          type="button"
+          onClick={handleTrain}
+          disabled={training || (audioSampleCount < MIN_SAMPLES_TO_TRAIN && imageSampleCount < MIN_IMAGE_SAMPLES_TO_TRAIN)}
+        >
           {training ? "Training…" : "Train Model"}
         </button>
-        {samples.length < MIN_SAMPLES_TO_TRAIN && (
-          <p className="hint">
-            Need at least {MIN_SAMPLES_TO_TRAIN} samples across {MIN_CATEGORIES_TO_TRAIN}+ categories to train.
-          </p>
-        )}
+        <p className="hint">
+          Bark model needs {MIN_SAMPLES_TO_TRAIN}+ samples across {MIN_CATEGORIES_TO_TRAIN}+ categories. Photo model
+          needs {MIN_IMAGE_SAMPLES_TO_TRAIN}+ across {MIN_IMAGE_CATEGORIES_TO_TRAIN}+ (photos take noticeably more
+          data to train reliably than barks).
+        </p>
         {trainStatus && <p className="hint">{trainStatus}</p>}
+        {imageTrainStatus && <p className="hint">{imageTrainStatus}</p>}
         {model && (
           <p className="hint">
-            Last trained {new Date(model.trainedAt).toLocaleString()} on {model.sampleCountAtTrain} samples.
+            🎤 Last trained {new Date(model.trainedAt).toLocaleString()} on {model.sampleCountAtTrain} samples.
+          </p>
+        )}
+        {imageModel && (
+          <p className="hint">
+            📷 Last trained {new Date(imageModel.trainedAt).toLocaleString()} on {imageModel.sampleCountAtTrain}{" "}
+            samples.
           </p>
         )}
 
@@ -209,9 +266,12 @@ export function TrainingModeScreen() {
                   {DEFAULT_CATEGORIES.find((c) => c.id === s.category)?.label} ·{" "}
                   {new Date(s.createdAt).toLocaleDateString()} · {s.source}
                 </span>
-                <button type="button" onClick={() => playBlob(s.audioBlob)}>
-                  ▶
-                </button>
+                {hasAudio(s) && (
+                  <button type="button" onClick={() => playBlob(s.audio.audioBlob)}>
+                    ▶
+                  </button>
+                )}
+                {hasImage(s) && <img className="sample-thumb" src={URL.createObjectURL(s.image.imageBlob)} alt="" />}
                 <button type="button" className="danger" onClick={() => deleteSample(s.id)}>
                   Delete
                 </button>
