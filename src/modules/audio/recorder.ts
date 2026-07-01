@@ -116,7 +116,11 @@ async function extractAudioFromVideo(blob: Blob): Promise<AudioBuffer> {
     return await new Promise<AudioBuffer>((resolve, reject) => {
       const video = document.createElement("video");
       video.playsInline = true; // required on iOS to avoid full-screen takeover
-      video.muted = false;      // audio must be un-muted for createMediaElementSource
+      // muted=true is required on iOS: Safari blocks unmuted autoplay even
+      // from a file-picker callback. muted only silences the speakers;
+      // createMediaElementSource() still receives the full audio data from
+      // the Web Audio graph, which runs before the mute stage.
+      video.muted = true;
       video.preload = "auto";
 
       const collected: Float32Array[][] = [];
