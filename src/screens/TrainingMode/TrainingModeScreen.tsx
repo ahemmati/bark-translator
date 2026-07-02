@@ -38,7 +38,7 @@ export function TrainingModeScreen() {
   const [features, setFeatures] = useState<AudioFeatures | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [postureTags, setPostureTags] = useState<PostureTag[]>([]);
-  const [category, setCategory] = useState<MoodCategory | null>(null);
+  const [categories, setCategories] = useState<MoodCategory[]>([]);
   const [exampleSentence, setExampleSentence] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [trainStatus, setTrainStatus] = useState<string | null>(null);
@@ -74,36 +74,40 @@ export function TrainingModeScreen() {
     setFeatures(null);
     setPhoto(null);
     setPostureTags([]);
-    setCategory(null);
+    setCategories([]);
     setExampleSentence("");
   }
 
   async function saveSample() {
-    if (!activeDog || !category) return;
+    if (!activeDog || categories.length === 0) return;
     const hasAudioInput = audioBlob && features;
     const hasImageInput = !!photo;
     if (!hasAudioInput && !hasImageInput) return;
 
-    const base = {
-      id: crypto.randomUUID(),
-      dogId: activeDog.id,
-      postureTags,
-      category,
-      sentence: exampleSentence.trim() || undefined,
-      source: "training" as const,
-      createdAt: Date.now(),
-    };
-
-    let sample: Sample;
-    if (hasAudioInput && hasImageInput) {
-      sample = { ...base, modality: "both", audio: { audioBlob: audioBlob!, features: features! }, image: { imageBlob: photo! } };
-    } else if (hasAudioInput) {
-      sample = { ...base, modality: "audio", audio: { audioBlob: audioBlob!, features: features! } };
-    } else {
-      sample = { ...base, modality: "image", image: { imageBlob: photo! } };
+    // Save one sample per selected emotion so the ML pipeline (which uses
+    // single-label classification) gets a clean, independent training example
+    // for each mood the user identified in this moment.
+    const now = Date.now();
+    for (const cat of categories) {
+      const base = {
+        id: crypto.randomUUID(),
+        dogId: activeDog.id,
+        postureTags,
+        category: cat,
+        sentence: exampleSentence.trim() || undefined,
+        source: "training" as const,
+        createdAt: now,
+      };
+      let sample: Sample;
+      if (hasAudioInput && hasImageInput) {
+        sample = { ...base, modality: "both", audio: { audioBlob: audioBlob!, features: features! }, image: { imageBlob: photo! } };
+      } else if (hasAudioInput) {
+        sample = { ...base, modality: "audio", audio: { audioBlob: audioBlob!, features: features! } };
+      } else {
+        sample = { ...base, modality: "image", image: { imageBlob: photo! } };
+      }
+      await samplesStore.put(sample);
     }
-
-    await samplesStore.put(sample);
     resetForm();
     await refresh();
   }
@@ -165,7 +169,7 @@ export function TrainingModeScreen() {
   }
   const audioSampleCount = samples.filter(hasAudio).length;
   const imageSampleCount = samples.filter(hasImage).length;
-  const canSave = !!category && ((audioBlob && features) || photo);
+  const canSave = categories.length > 0 && ((audioBlob && features) || photo);
 
   return (
     <div className="screen">
@@ -200,12 +204,22 @@ export function TrainingModeScreen() {
           <PostureTagPicker value={postureTags} onChange={setPostureTags} />
 
           <p className="hint">
-            What does this mean?
+            What emotions is this? Pick all that apply
             {suggestCategoryFromTags(postureTags) && (
-              <> — body language suggests <strong>{DEFAULT_CATEGORIES.find((c) => c.id === suggestCategoryFromTags(postureTags))?.label}</strong> ✨, but you know your dog best</>
+              <> — body language suggests <strong>{DEFAULT_CATEGORIES.find((c) => c.id === suggestCategoryFromTags(postureTags))?.label}</strong> ✨</>
             )}
           </p>
-          <CategoryPicker value={category} onChange={setCategory} suggested={suggestCategoryFromTags(postureTags)} />
+          <CategoryPicker
+            multiSelect
+            value={categories}
+            onChange={setCategories}
+            suggested={suggestCategoryFromTags(postureTags)}
+          />
+          {categories.length > 1 && (
+            <p className="hint">
+              Saving {categories.length} training samples — one per selected emotion.
+            </p>
+          )}
 
           <p className="hint">Optional: write what you think the dog is "saying" in this exact moment</p>
           <input
@@ -216,7 +230,7 @@ export function TrainingModeScreen() {
           />
 
           <button type="button" onClick={saveSample} disabled={!canSave}>
-            Save Training Sample
+            Save {categories.length > 1 ? `${categories.length} Training Samples` : "Training Sample"}
           </button>
         </section>
       )}

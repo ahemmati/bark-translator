@@ -580,6 +580,35 @@ textarea {
   border-top: 1px dashed var(--border);
 }
 
+/* Multi-select category chip checkmark */
+.multi-check {
+  margin-left: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.category-picker.is-multi .category-chip.is-selected {
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+}
+
+/* Photo body-language reading card in Translate Mode */
+.photo-reading-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: #fff7ed;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem;
+  margin-top: 0.75rem;
+  animation: reveal 0.3s ease;
+}
+
+.photo-reading-emoji {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
 .add-dog {
   background: var(--card-bg);
   border: 1px solid var(--border);

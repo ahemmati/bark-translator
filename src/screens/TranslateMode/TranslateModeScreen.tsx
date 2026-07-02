@@ -23,9 +23,11 @@ import { trainModelForDog, MIN_SAMPLES_FOR_CONFIDENT_TRANSLATE } from "../../mod
 import { trainImageModelForDog } from "../../modules/ml/trainImageModel";
 import {
   DEFAULT_CATEGORIES,
+  POSTURE_TAGS,
   categoryEmoji,
   hasAudio,
   hasImage,
+  suggestCategoryFromTags,
   type AudioFeatures,
   type ModalityUsed,
   type MoodCategory,
@@ -64,6 +66,10 @@ export function TranslateModeScreen() {
   const [correctedCategory, setCorrectedCategory] = useState<MoodCategory | null>(null);
   const [correctedSentence, setCorrectedSentence] = useState("");
   const [savedCorrection, setSavedCorrection] = useState(false);
+
+  // Photo-only reading section (works without a trained image model, uses
+  // posture tags + Dog Behavior Library for an immediate general reading).
+  const [photoPostureTags, setPhotoPostureTags] = useState<PostureTag[]>([]);
 
   useEffect(() => {
     if (!activeDog) return;
@@ -252,7 +258,9 @@ export function TranslateModeScreen() {
       <h2>Translate Mode — {activeDog.name}</h2>
       <p className="hint">Record a bark, add a photo, or both — Translate uses whichever is ready.</p>
 
+      {/* ── Bark translation ── */}
       <section className="card">
+        <h3>🎤 Bark</h3>
         <RecordButton onRecorded={handleRecorded} />
         {audioBlob && (
           <div className="row">
@@ -263,28 +271,68 @@ export function TranslateModeScreen() {
         )}
         {audioBlob && !audioReady && (
           <p className="hint warning">
-            🎤 Still learning {activeDog.name}'s bark — {audioSampleCount}/{MIN_SAMPLES_FOR_CONFIDENT_TRANSLATE}{" "}
-            training samples.
+            Still learning {activeDog.name}'s bark — {audioSampleCount}/{MIN_SAMPLES_FOR_CONFIDENT_TRANSLATE} training samples needed.
           </p>
         )}
+      </section>
 
-        <p className="hint">Photo</p>
+      {/* ── Photo translation ── */}
+      <section className="card">
+        <h3>📷 Read a photo</h3>
         <PhotoCapture onCapture={handlePhoto} onAudioExtracted={handleRecorded} />
-        {photo && !imageReady && (
-          <p className="hint warning">📷 Still learning {activeDog.name}'s look — needs more labeled photos per category in Training Mode.</p>
-        )}
 
-        {(audioBlob || photo) && (
+        {photo && (
           <>
-            <p className="hint">What's the dog's posture/context right now? (optional, improves accuracy)</p>
-            <PostureTagPicker value={postureTags} onChange={setPostureTags} />
-            <button type="button" onClick={handleTranslate} disabled={busy || (!audioReady && !imageReady)}>
-              {busy ? "Translating…" : "Translate"}
-            </button>
+            <p className="hint" style={{ marginTop: "0.6rem" }}>
+              What do you see in the photo? Mark what you observe — this gives an instant reading using the
+              Dog Behavior Library even before a photo model is trained.
+            </p>
+            <PostureTagPicker value={photoPostureTags} onChange={setPhotoPostureTags} />
+
+            {photoPostureTags.length > 0 && (() => {
+              const mood = suggestCategoryFromTags(photoPostureTags);
+              if (!mood) return null;
+              const cat = DEFAULT_CATEGORIES.find((c) => c.id === mood)!;
+              const signals = POSTURE_TAGS
+                .filter((t) => photoPostureTags.includes(t.id) && t.suggestedCategory === mood)
+                .map((t) => t.label)
+                .join(", ");
+              return (
+                <div className="photo-reading-card">
+                  <div className="photo-reading-emoji">{cat.emoji}</div>
+                  <div>
+                    <strong>{cat.label}</strong>
+                    <p className="hint">Body language signals: {signals}</p>
+                    <p className="hint">
+                      {POSTURE_TAGS.find((t) => photoPostureTags.includes(t.id) && t.suggestedCategory === mood)?.generalMeaning}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {photo && !imageReady && (
+              <p className="hint warning" style={{ marginTop: "0.4rem" }}>
+                📷 Photo model not ready yet — train more labeled photos to enable ML-based photo translation.
+              </p>
+            )}
           </>
         )}
-        {error && <p className="error-text">{error}</p>}
+
       </section>
+
+      {/* ── Combined ML translation (bark + photo model) ── */}
+      {(audioBlob || photo) && (audioReady || imageReady) && (
+        <section className="card">
+          <h3>🧠 ML Translation</h3>
+          <p className="hint">What's the dog's posture/context right now? (optional, improves accuracy)</p>
+          <PostureTagPicker value={postureTags} onChange={setPostureTags} />
+          <button type="button" onClick={handleTranslate} disabled={busy}>
+            {busy ? "Translating…" : "Translate"}
+          </button>
+          {error && <p className="error-text">{error}</p>}
+        </section>
+      )}
 
       {prediction && sentence && modalityUsed && (
         <section className="card translation-result">
