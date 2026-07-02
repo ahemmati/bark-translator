@@ -269,7 +269,7 @@ export function TranslateModeScreen() {
         )}
 
         <p className="hint">Photo</p>
-        <PhotoCapture onCapture={handlePhoto} />
+        <PhotoCapture onCapture={handlePhoto} onAudioExtracted={handleRecorded} />
         {photo && !imageReady && (
           <p className="hint warning">📷 Still learning {activeDog.name}'s look — needs more labeled photos per category in Training Mode.</p>
         )}

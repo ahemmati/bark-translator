@@ -190,7 +190,7 @@ export function TrainingModeScreen() {
           </div>
         )}
         <p className="hint">Photo</p>
-        <PhotoCapture onCapture={setPhoto} />
+        <PhotoCapture onCapture={setPhoto} onAudioExtracted={handleRecorded} />
       </section>
 
       {((audioBlob && features) || photo) && (
