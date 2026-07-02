@@ -386,11 +386,43 @@ button.danger {
   margin: 0.5rem 0 1rem;
 }
 
+.photo-pick-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.photo-pick-label:hover {
+  border-color: var(--accent);
+}
+
+.photo-pick-label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .photo-preview img {
-  max-width: 160px;
-  border-radius: 8px;
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 10px;
   display: block;
-  margin: 0.5rem 0;
+  object-fit: cover;
+}
+
+.photo-preview-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
 }
 
 input[type="text"],

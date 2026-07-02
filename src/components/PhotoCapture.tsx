@@ -30,20 +30,26 @@ export function PhotoCapture({ onCapture }: PhotoCaptureProps) {
 
   return (
     <div className="photo-capture">
-      {/* No `capture` attribute: lets users pick from camera OR photo library OR any file on device */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*,.heic,.heif,.avif"
-        onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-      />
-      {previewUrl && (
+      {!previewUrl ? (
+        <label className="photo-pick-label">
+          📷 Choose photo
+          {/* No `capture` attribute so the sheet shows camera + photo library + Files.
+              Explicit Apple formats alongside image/* so iOS file picker surfaces
+              HEIC/HEIF photos from the camera roll. */}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*,.heic,.heif,.avif,.dng"
+            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      ) : (
         <div className="photo-preview">
           <img src={previewUrl} alt={fileName ?? "Selected photo"} />
-          <span className="photo-filename">{fileName}</span>
-          <button type="button" onClick={clear}>
-            Remove
-          </button>
+          <div className="photo-preview-footer">
+            <span className="photo-filename">{fileName}</span>
+            <button type="button" onClick={clear}>✕ Remove</button>
+          </div>
         </div>
       )}
     </div>
