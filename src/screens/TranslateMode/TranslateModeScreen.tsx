@@ -244,23 +244,17 @@ export function TranslateModeScreen() {
     );
   }
 
-  if (!model && !imageModel) {
-    return (
-      <div className="screen">
-        <h2>Translate Mode — {activeDog.name}</h2>
-        <p>No trained model yet. Head to Training Mode, label some barks and/or photos, then train.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="screen">
       <h2>Translate Mode — {activeDog.name}</h2>
-      <p className="hint">Record a bark, add a photo, or both — Translate uses whichever is ready.</p>
+      <p className="hint">Read a photo, record a bark, or both.</p>
 
       {/* ── Bark translation ── */}
       <section className="card">
         <h3>🎤 Bark</h3>
+        {!model && (
+          <p className="hint warning">No bark model yet — record and label barks in Training Mode first.</p>
+        )}
         <RecordButton onRecorded={handleRecorded} />
         {audioBlob && (
           <div className="row">
